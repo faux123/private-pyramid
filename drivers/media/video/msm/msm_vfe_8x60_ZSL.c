@@ -48,8 +48,6 @@ static void  *vfe_syncdata;
 static struct work_struct workq;
 #endif
 static void vfe31_send_msg_no_payload(enum VFE31_MESSAGE_ID id);
-static int32_t gamma_flag;
-static int32_t luma_flag;
 
 struct vfe31_isr_queue_cmd {
 	struct list_head list;
@@ -1466,32 +1464,22 @@ static int vfe31_start(void)
 static void vfe31_update(void)
 {
 	unsigned long flags;
-	uint32_t temp;
 	CDBG("vfe31_update\n");
 
-	if(gamma_flag == true) {
-		temp = msm_io_r(vfe31_ctrl->vfebase + V31_RGB_G_OFF);
-		CDBG("%s: gamma bank %d\n", __func__, (temp != 0));
-
-		if(temp == 0)
-			msm_io_w(7, vfe31_ctrl->vfebase + V31_RGB_G_OFF);
+	if (vfe31_ctrl->update_gamma) {
+		if (!msm_io_r(vfe31_ctrl->vfebase + V31_GAMMA_CFG_OFF))
+			msm_io_w(7, vfe31_ctrl->vfebase+V31_GAMMA_CFG_OFF);
 		else
-			msm_io_w(0, vfe31_ctrl->vfebase + V31_RGB_G_OFF);
-
-		gamma_flag = false;
+			msm_io_w(0, vfe31_ctrl->vfebase+V31_GAMMA_CFG_OFF);
+		vfe31_ctrl->update_gamma = false;
 	}
-	if(luma_flag == true) {
-		temp = msm_io_r(vfe31_ctrl->vfebase + V31_LA_OFF);
-
-		if(temp == 0)
-			msm_io_w(1, vfe31_ctrl->vfebase + V31_LA_OFF);
+	if (vfe31_ctrl->update_luma) {
+		if (!msm_io_r(vfe31_ctrl->vfebase + V31_LUMA_CFG_OFF))
+			msm_io_w(1, vfe31_ctrl->vfebase + V31_LUMA_CFG_OFF);
 		else
-			msm_io_w(0, vfe31_ctrl->vfebase + V31_LA_OFF);
-		luma_flag = false;
+			msm_io_w(0, vfe31_ctrl->vfebase + V31_LUMA_CFG_OFF);
+		vfe31_ctrl->update_luma = false;
 	}
-
-
-
 	spin_lock_irqsave(&vfe31_ctrl->update_ack_lock, flags);
 	vfe31_ctrl->update_ack_pending = TRUE;
 	spin_unlock_irqrestore(&vfe31_ctrl->update_ack_lock, flags);
@@ -1953,6 +1941,7 @@ static int vfe31_proc_general(struct msm_vfe31_cmd *cmd)
 			goto proc_general_done;
 
 		}
+		/* Select Bank 0*/
 		*cmdp = 0;
 		msm_io_memcpy(vfe31_ctrl->vfebase + vfe31_cmd[cmd->id].offset,
 				cmdp, (vfe31_cmd[cmd->id].length));
@@ -1989,7 +1978,7 @@ static int vfe31_proc_general(struct msm_vfe31_cmd *cmd)
 			CDBG("V31_LA_UPDATE, ch 1\n");
 			vfe31_write_la_cfg(LUMA_ADAPT_LUT_RAM_BANK1 , cmdp);
 		}
-		luma_flag = true;
+		vfe31_ctrl->update_luma = true;
 		cmdp -= 1;
 		}
 		break;
@@ -2032,6 +2021,8 @@ static int vfe31_proc_general(struct msm_vfe31_cmd *cmd)
 			rc = -EFAULT;
 			goto proc_general_done;
 		}
+		/* Select Bank 0*/
+		*cmdp = 0;
 		msm_io_memcpy(vfe31_ctrl->vfebase + V31_RGB_G_OFF,
 				cmdp, 4);
 		cmdp += 1;
@@ -2053,7 +2044,7 @@ static int vfe31_proc_general(struct msm_vfe31_cmd *cmd)
 			goto proc_general_done;
 		}
 
-		old_val = msm_io_r(vfe31_ctrl->vfebase + V31_RGB_G_OFF);
+		old_val = msm_io_r(vfe31_ctrl->vfebase + V31_GAMMA_CFG_OFF);
 		cmdp += 1;
 
 		if (!old_val) {
@@ -2062,8 +2053,8 @@ static int vfe31_proc_general(struct msm_vfe31_cmd *cmd)
 		} else {
 			CDBG("V31_RGB_G_UPDATE, vfe using bank 1 \n");
 			vfe31_write_gamma_cfg(RGBLUT_CHX_BANK0 , cmdp);
-		}
-		gamma_flag = true;
+			}
+		vfe31_ctrl->update_gamma = true;
 		cmdp -= 1;
 		}
 		break;
@@ -3756,9 +3747,9 @@ static int vfe31_resource_init(struct msm_vfe_callback *presp,
 	vfe31_ctrl->vfemem = vfemem;
 	vfe31_ctrl->vfeio  = vfeio;
 	vfe31_ctrl->s_info = s_info;
+	vfe31_ctrl->update_gamma = false;
+	vfe31_ctrl->update_luma = false;
 
-	gamma_flag = false;
-	luma_flag = false;
 	return 0;
 
 cmd_init_failed3:
