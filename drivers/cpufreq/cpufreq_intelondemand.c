@@ -494,11 +494,24 @@ static ssize_t store_sampling_window(struct kobject *a, struct attribute *b,
 	if (input > 1000000)
 		input = 1000000;
 
-	if (input < 10000)
-		input = 10000;
+	if (input < dbs_tuners_ins.sampling_rate)
+		input = dbs_tuners_ins.sampling_rate;
 
 	mutex_lock(&dbs_mutex);
 	dbs_tuners_ins.sampling_window = input;
+	/* User set sampling window equal default sampling rate,
+	 * It means that user want disable sampling window, so
+	 * return to legacy sampling mode
+	 * */
+	if (input == dbs_tuners_ins.sampling_rate) {
+		dbs_tuners_ins.up_threshold = MICRO_FREQUENCY_UP_THRESHOLD;
+		dbs_tuners_ins.down_differential =
+			MICRO_FREQUENCY_DOWN_DIFFERENTIAL;
+	} else {
+		dbs_tuners_ins.up_threshold = SAMPLING_WINDOW_UP_THRESHOLD;
+		dbs_tuners_ins.down_differential =
+			SAMPLING_WINDOW_DOWN_DIFFERENTIAL;
+	}
 	mutex_unlock(&dbs_mutex);
 
 	return count;
@@ -747,7 +760,8 @@ static void dbs_check_cpu(struct cpu_dbs_info_s *this_dbs_info)
 		}
 	}
 
-	if (sampling_window_enable)
+	if (sampling_window_enable && (dbs_tuners_ins.sampling_window !=
+						dbs_tuners_ins.sampling_rate))
 		/* Get the average load in the lastest sampling window */
 		max_load_freq = get_load_freq_during_sampling_window(
 				this_dbs_info, max_load_freq,
