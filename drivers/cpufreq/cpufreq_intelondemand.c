@@ -301,6 +301,7 @@ show_one(sampling_down_factor, sampling_down_factor);
 show_one(ignore_nice_load, ignore_nice);
 show_one(powersave_bias, powersave_bias);
 show_one(sampling_window, sampling_window);
+show_one(window_is_dynamic, window_is_dynamic);
 
 /*** delete after deprecation time ***/
 
@@ -517,6 +518,26 @@ static ssize_t store_sampling_window(struct kobject *a, struct attribute *b,
 	return count;
 }
 
+static ssize_t store_window_is_dynamic(struct kobject *a, struct attribute *b,
+				    const char *buf, size_t count)
+{
+	unsigned int input;
+	int ret;
+	ret = sscanf(buf, "%u", &input);
+
+	if (ret != 1)
+		return -EINVAL;
+
+	if (input != 0)
+		input = 1;
+
+	mutex_lock(&dbs_mutex);
+	dbs_tuners_ins.window_is_dynamic = input;
+	mutex_unlock(&dbs_mutex);
+
+	return count;
+}
+
 define_one_global_rw(sampling_rate);
 define_one_global_rw(io_is_busy);
 define_one_global_rw(up_threshold);
@@ -525,6 +546,7 @@ define_one_global_rw(sampling_down_factor);
 define_one_global_rw(ignore_nice_load);
 define_one_global_rw(powersave_bias);
 define_one_global_rw(sampling_window);
+define_one_global_rw(window_is_dynamic);
 
 static struct attribute *dbs_attributes[] = {
 	&sampling_rate_max.attr,
@@ -537,6 +559,7 @@ static struct attribute *dbs_attributes[] = {
 	&powersave_bias.attr,
 	&io_is_busy.attr,
 	&sampling_window.attr,
+	&window_is_dynamic.attr,
 	NULL
 };
 
